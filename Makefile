@@ -13,9 +13,9 @@ TESTS = test/wots \
 		test/speed \
 		test/xmss_determinism \
 		test/xmss \
-		test/xmss_simple \
+		test/xmss_fast \
 		test/xmssmt \
-		test/xmssmt_simple \
+		test/xmssmt_fast \
 
 UI = ui/xmss_keypair \
 	 ui/xmss_sign \
@@ -23,12 +23,12 @@ UI = ui/xmss_keypair \
 	 ui/xmssmt_keypair \
 	 ui/xmssmt_sign \
 	 ui/xmssmt_open \
-	 ui/xmss_keypair_simple \
-	 ui/xmss_sign_simple \
-	 ui/xmss_open_simple \
-	 ui/xmssmt_keypair_simple \
-	 ui/xmssmt_sign_simple \
-	 ui/xmssmt_open_simple \
+	 ui/xmss_keypair_fast \
+	 ui/xmss_sign_fast \
+	 ui/xmss_open_fast \
+	 ui/xmssmt_keypair_fast \
+	 ui/xmssmt_sign_fast \
+	 ui/xmssmt_open_fast \
 
 all: tests ui
 
@@ -42,13 +42,13 @@ test: $(TESTS:=.exec)
 test/%.exec: test/%
 	@$<
 
-test/xmss_simple: test/xmss.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
+test/xmss_fast: test/xmss.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) -DXMSS_SIGNATURES=1024 $(CFLAGS) -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
 test/xmss: test/xmss.c $(SOURCES) $(OBJS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $@ $(SOURCES) $< $(LDLIBS)
 
-test/xmssmt_simple: test/xmss.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
+test/xmssmt_fast: test/xmss.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) -DXMSSMT -DXMSS_SIGNATURES=1048576 $(CFLAGS) -W -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
 test/xmssmt: test/xmss.c $(SOURCES) $(OBJS) $(HEADERS)
@@ -63,10 +63,10 @@ test/vectors: test/vectors.c $(SOURCES) $(OBJS) $(HEADERS)
 test/%: test/%.c $(SOURCES) $(OBJS) $(HEADERS)
 	$(CC) $(CFLAGS) -o $@ $(SOURCES) $< $(LDLIBS)
 
-ui/xmss_%_simple: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
+ui/xmss_%_fast: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) $(CFLAGS) -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
-ui/xmssmt_%_simple: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
+ui/xmssmt_%fast: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) -DXMSSMT $(CFLAGS) -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
 ui/xmss_%: ui/%.c $(SOURCES) $(OBJS) $(HEADERS)

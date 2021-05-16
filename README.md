@@ -20,4 +20,4 @@ Then, my codes are built by "make" and you can use executables in "test" and "ui
 
 ## License
 
-This source code was written by Haruhisa Kosuge. All included code is available under the CC0 1.0 Universal Public Domain Dedication.
+All included code is available under the CC0 1.0 Universal Public Domain Dedication.

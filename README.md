@@ -12,11 +12,11 @@ Please download the above source codes.
 
 Put all of the following files under the directly "xmss-reference-master" of the original implementation.\
  xmss_core_simple.c,\
- hash_address_2.c,\ 
+ hash_address_2.c,\
  hash_address_2.h,\
  Makefile (replace from existing one)
   
-Then, my codes are compiled by "make" and you can use executables in "test" and "ui" directlies by the totally same manner as the original implementation.
+Then, my codes are built by "make" and you can use executables in "test" and "ui" directlies by the same way as the original implementation.
 
 ## License
 

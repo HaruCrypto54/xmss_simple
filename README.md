@@ -6,9 +6,8 @@ This is a reference implementation of a paper I am currently submitting. The alg
 ### Installing
 
 My code runs using the reference implementation of
-https://github.com/XMSS/xmss-reference
-(hereinafter, we call "original implementation")
-Please download the above source codes.
+https://github.com/XMSS/xmss-reference (hereinafter, we call "original implementation").
+Please install the original implementation first.
 
 Put all of the following files under the directly "xmss-reference-master" of the original implementation.\
  xmss_core_simple.c,\

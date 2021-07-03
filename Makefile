@@ -66,7 +66,7 @@ test/%: test/%.c $(SOURCES) $(OBJS) $(HEADERS)
 ui/xmss_%_fast: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) $(CFLAGS) -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
-ui/xmssmt_%fast: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
+ui/xmssmt_%_fast: ui/%.c $(SOURCES_simple) $(OBJS) $(HEADERS_simple)
 	$(CC) -DXMSSMT $(CFLAGS) -o $@ $(SOURCES_simple) $< $(LDLIBS)
 
 ui/xmss_%: ui/%.c $(SOURCES) $(OBJS) $(HEADERS)

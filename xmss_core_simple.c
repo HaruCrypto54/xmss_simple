@@ -5,7 +5,6 @@
 #include "hash.h"
 #include "hash_address.h"
 #include "hash_address_2.h"
-#include "xmss_commons.h"
 #include "params.h"
 #include "randombytes.h"
 #include "wots.h"
@@ -13,10 +12,17 @@
 #include "xmss_core.h"
 
 /*
-If you want to speed up by increasing the state size, predefine WOTS_SIG_IN_STATE.
-Then, a state includes WOTS signature in each layer.
-#define WOTS_SIG_IN_STATE
+1 If you want to speed up by increasing the state size, predefine WOTS_SIG_IN_STATE.
+  Then, a state includes WOTS signature in each layer.
+  #define WOTS_SIG_IN_STATE
+
+2 If you want to reduce run time for key generation (2^{h/d-1} leaf computations are reduced), predegine FAST_KEYGEN.
+  #define FAST_KEYGEN
 */
+
+// #define SAFE_MODE //for debug
+
+#define FAST_KEYGEN
 #define SK_MT_BYTES ( params->index_bytes + (4 * params->n) )
 
 #define SIG_XMSS_BYTES ( params->wots_sig_bytes + (params->tree_height * params->n) )
@@ -92,6 +98,31 @@ static void stack_push(
 	stack->nodeheight[stack->size] = push_nodeheight;
 	stack->size++;
 }
+//Computes a leaf node from a WOTS public key using an L-tree.
+//See RFC8391.
+ void ltree(const xmss_params *params,
+                   unsigned char *leaf, unsigned char *wots_pk,
+                   const unsigned char *pub_seed, uint32_t addr[8])
+{
+    unsigned int len = params->wots_len;
+    uint32_t i;
+
+    set_tree_height(addr, 0);
+    while (len > 1) {
+        for (i = 0; i < len >> 1; i++) {
+            set_tree_index(addr, i);
+            thash_h(params, wots_pk + i*params->n,
+                           wots_pk + (2 * i) * params->n, pub_seed, addr);
+        }
+        if (len & 1) {
+            memcpy(wots_pk + (len >> 1)*params->n,
+                   wots_pk + (len - 1)*params->n, params->n);
+        }
+        len = (len + 1) >> 1;
+        set_tree_height(addr, get_tree_height(addr) + 1);
+    }
+    memcpy(leaf, wots_pk, params->n);
+}
 // Given leaf index i and height of root node s, computes the root node using treehash algorithm.
 //See RFC8391.
 static void tree_hash(
@@ -109,6 +140,7 @@ static void tree_hash(
 	unsigned char stack_node[(t + 1) * params->n];
 	unsigned char stack_height[t + 1];	
 	unsigned char node[params->n];
+	unsigned char wots_pk[params->wots_sig_bytes];
 	unsigned char thash_h_in[2 * params->n];
 	uint32_t ots_addr[8] = { 0 };
 	uint32_t ltree_addr[8] = { 0 };
@@ -131,7 +163,9 @@ static void tree_hash(
 	//2.1. Compute a leaf.
 		set_ltree_addr(ltree_addr, s + i);
 		set_ots_addr(ots_addr, s + i);
-		gen_leaf_wots(params, node, sk_seed, pub_seed, ltree_addr, ots_addr);
+		//gen_leaf_wots(params, node, sk_seed, pub_seed, ltree_addr, ots_addr);
+		wots_pkgen(params, wots_pk, sk_seed, pub_seed, ots_addr);
+    	ltree(params, node, wots_pk, pub_seed, ltree_addr);
 	//2.2. Repeat t_hash while node and top of the stack have the same height.
 		set_tree_height(node_addr, 0);
 		set_tree_index(node_addr, i + s);
@@ -220,31 +254,7 @@ static void update_treehash(
 		}
 	}
 }
-//Computes a leaf node from a WOTS public key using an L-tree.
-//See RFC8391.
- void ltree(const xmss_params *params,
-                   unsigned char *leaf, unsigned char *wots_pk,
-                   const unsigned char *pub_seed, uint32_t addr[8])
-{
-    unsigned int len = params->wots_len;
-    uint32_t i;
 
-    set_tree_height(addr, 0);
-    while (len > 1) {
-        for (i = 0; i < len >> 1; i++) {
-            set_tree_index(addr, i);
-            thash_h(params, wots_pk + i*params->n,
-                           wots_pk + (2 * i) * params->n, pub_seed, addr);
-        }
-        if (len & 1) {
-            memcpy(wots_pk + (len >> 1)*params->n,
-                   wots_pk + (len - 1)*params->n, params->n);
-        }
-        len = (len + 1) >> 1;
-        set_tree_height(addr, get_tree_height(addr) + 1);
-    }
-    memcpy(leaf, wots_pk, params->n);
-}
 //Given XMSS signature, return root of XMSS tree.
 //See RFC8391.
 void xmss_root_from_sig(
@@ -325,18 +335,36 @@ static void bds_stateGen(
 		set_tree_index(addr, 1);
 		thash_h(params, state->auth + (i + 1) * params->n, thash_h_in, pub_seed, addr);
 	}
-	//3. Generate a treehash instance of h/d - -1 in the next XMSS tree in only XMSS^MT.
-	if (params->d > 1){
-		set_tree_addr(addr, 1);
-		tree_hash(params, (state->treehash + params->tree_height - 1)->node, 
-			sk, (1 << (params->tree_height - 1)), params->tree_height - 1, addr);
-	}
-	(state->treehash + params->tree_height - 1)->fin = 1;
-	//4. Init other entries.
+	//3. Init other entries.
 	state->stack->size = 0;
 	memset(state->stack->node, 0, (params->tree_height - 1) * params->n);
 	memset(state->stack->nodeheight, 0, params->tree_height - 1);
-	memset(state->keep, 0, (params->tree_height >> 1) * params->n);
+	memset(state->keep, 0, (params->tree_height >> 1) * params->n);	
+	//4. Initialization of highest instance of h/d - 1 in the next XMSS tree.
+	if (params->d > 1){
+#ifdef FAST_KEYGEN
+	// Execute h/(2d)+1 treehash upadates on highest treehash instance.
+	// This computation prevents the other instances from popping nodes of this instance.
+		(state->treehash + params->tree_height - 1)->fin = 0;
+		(state->treehash + params->tree_height - 1)->idx = 3 * (1 << (params->tree_height - 1));
+		for (i = 0; i < ((params->tree_height + 1) >> 1) + 1 
+						&& (state->treehash + params->tree_height - 1)->fin == 0; i++) {
+			update_treehash(params, sk, params->tree_height - 1, state, 0);
+		}
+#else
+    // Highest treehash instance generates its target node.
+    // This requires 2^{h/d-1} leaf computations. If you want to avoid it predefine FASR_KEYGEN.
+		(state->treehash + params->tree_height - 1)->fin = 1;
+		set_tree_addr(addr, 1);
+		tree_hash(params, (state->treehash + params->tree_height - 1)->node, 
+			sk, 3 * (1 << (params->tree_height - 1)), params->tree_height - 1, addr);
+#endif
+	}else{
+	// The highest instance of h/d - 1  has no meaning in XMSS. Kill the functionality.
+		(state->treehash + params->tree_height - 1)->fin = 1;
+	}
+	
+
 }
 // Generate mmt state from secret key.
 static void mmt_stateGen(
@@ -429,9 +457,17 @@ static void bds_state_update(
 			}
 		}
 	}
+#ifdef SAFE_MODE
+	// Check if nodes are correctly pushed with respect to their heights.
+	for (i=0; i < state->stack->size; ++i){
+		if(tau>1 && state->stack->nodeheight[i] < tau-1) {
+			exit(0);
+		}
+	}
+#endif
 	//7. Treehash updates.
-	for (i = 0; i < (params->tree_height >> 1) + 1; i++) {
-	//7.1. Get the lowest incomplete treehash instance.
+	for (i = 0; i < (params->tree_height + 1) >> 1; i++) {
+	//7.1. Get the lowest unfinished treehash instance.
 		j = 0;
 		while ((state->treehash + j)->fin == 1 && j < params->tree_height) {
 			j++;
@@ -440,7 +476,7 @@ static void bds_state_update(
 		if (j < params->tree_height) {
 			update_treehash(params, sk, j, state, 0);
 		} else {
-			i = (params->tree_height >> 1) + 1;
+			i = (params->tree_height + 1) >> 1;
 		}
 	}
 }
@@ -488,7 +524,7 @@ static void mmt_state_update(
 	//3. Treehash update (only once).
 	}
 	else if ((idx_next & ((1ULL << ((layer - 1) * params->tree_height)) - 1ULL)) == 0) {
-	//3.1. Get the highest incomplete treehash instance.
+	//3.1. Get the highest unfinished treehash instance.
 		j = params->tree_height;
 		while (j > 0 && (state->treehash + j - 1)->fin == 1) {
 			j--;
@@ -615,7 +651,7 @@ int xmssmt_core_keypair(const xmss_params *params,
 	randombytes(sk + params->index_bytes, 2*params->n);
 	//1.3. Init PUB_SEED.
 	randombytes(pub_seed, params->n);
-	//1.4. Memmery allocation od members of state.
+	//1.4. Memmory allocation od members of state.
 	state.stack = stack;
 	state.treehash = treehash;
 	//2. Generate state.
